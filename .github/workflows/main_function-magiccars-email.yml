@@ -40,7 +40,7 @@ jobs:
       - name: Zip function app content
         # This command zips everything needed for the function app, excluding unnecessary files
         run: |
-          zip -r release.zip . -x ".git/*" -x ".github/*" -x ".venv/*" -x "__pycache__/*" -x "uv.lock" -x "*.yml" -x "*.md" # Adjust exclusions as needed
+          zip -r release.zip . -x ".git/*" -x ".github/*" -x ".venv/*" -x "__pycache__/*" -x "uv.lock" -x "*.yml" -x "*.md" -x ".python_packages/*"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -61,7 +61,7 @@ jobs:
       # The package.zip will be downloaded to the root of the runner's workspace
 
       - name: 'Deploy to Azure Functions'
-        uses: azure/functions-action@v1.3.1
+        uses: azure/functions-action@v1.5.2
         id: deploy-to-function
         with:
           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
@@ -69,4 +69,3 @@ jobs:
           package: release.zip # Pass the path to the downloaded zip file directly
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E63A6676DB544B59989BEAD9C56F9231 }} # Ensure this secret is configured in GitHub
           scm-do-build-during-deployment: true
-          enable-oryx-build: true
