@@ -60,11 +60,34 @@ jobs:
 
       # The package.zip will be downloaded to the root of the runner's workspace
 
-      - name: 'Deploy to Azure Functions'
-        uses: azure/functions-action@v1.5.2
-        id: deploy-to-function
-        with:
-          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
-          slot-name: 'Production' # Unless you're using deployment slots, this is usually the default.
-          package: release.zip # Pass the path to the downloaded zip file directly
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E63A6676DB544B59989BEAD9C56F9231 }}
+      # - name: 'Deploy to Azure Functions'
+      #   uses: azure/functions-action@v1.5.2
+      #   id: deploy-to-function
+      #   with:
+      #     app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+      #     slot-name: 'Production' # Unless you're using deployment slots, this is usually the default.
+      #     package: release.zip # Pass the path to the downloaded zip file directly
+      #     publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E63A6676DB544B59989BEAD9C56F9231 }}
+     - name: Extract publish profile credentials
+      id: publish-profile
+      run: |
+        # Extract credentials from publish profile
+        PUBLISH_PROFILE='${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E63A6676DB544B59989BEAD9C56F9231 }}'
+        USERNAME=$(echo "$PUBLISH_PROFILE" | grep -o 'userName="[^"]*"' | cut -d'"' -f2)
+        PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -o 'userPWD="[^"]*"' | cut -d'"' -f2)
+        SITE_NAME=$(echo "$PUBLISH_PROFILE" | grep -o 'msdeploySite="[^"]*"' | cut -d'"' -f2)
+
+        echo "::add-mask::$USERNAME"
+        echo "::add-mask::$PASSWORD"
+        echo "username=$USERNAME" >> $GITHUB_OUTPUT
+        echo "password=$PASSWORD" >> $GITHUB_OUTPUT
+        echo "site_name=$SITE_NAME" >> $GITHUB_OUTPUT
+
+    - name: Deploy to Azure Functions using REST API
+      run: |
+        curl -X POST \
+          "https://${{ steps.publish-profile.outputs.site_name }}.scm.azurewebsites.net/api/zipdeploy" \
+          -u "${{ steps.publish-profile.outputs.username }}:${{ steps.publish-profile.outputs.password }}" \
+          -H "Content-Type: application/zip" \
+          --data-binary @release.zip \
+          -v
