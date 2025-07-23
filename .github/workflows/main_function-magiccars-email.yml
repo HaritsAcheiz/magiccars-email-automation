@@ -7,67 +7,64 @@ name: Build and deploy Python project to Azure Function App - function-magiccars
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:
+      - main # or master, depending on your default branch
+  workflow_dispatch: # Allows manual trigger of the workflow
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.' # set this to the path to your web app project, defaults to the repository root
-  PYTHON_VERSION: '3.12' # set this to the python version to use (supports 3.6, 3.7, 3.8)
+  AZURE_FUNCTIONAPP_NAME: function-magiccars-email # Replace with your Function App name
+  PYTHON_VERSION: '3.12' # Recommended Python version for Azure Functions (e.g., 3.9, 3.10, 3.11)
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read # This is required for actions/checkout
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python version
+      - name: Set up Python version
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create and start virtual environment
+      - name: Install dependencies and prepare for deployment
         run: |
-          python -m venv venv
-          source venv/bin/activate
+          python -m pip install --upgrade pip
+          # Install dependencies into a deployable folder, required by Azure Functions
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      # Optional: Add step to run tests here (e.g., pytest)
 
-      # Optional: Add step to run tests here
-
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+      - name: Zip function app content
+        # This command zips everything needed for the function app, excluding unnecessary files
+        run: |
+          zip -r release.zip . -x ".git/*" -x ".github/*" -x ".venv/*" -x "__pycache__/*" -x "uv.lock" -x "*.yml" -x "*.md" # Adjust exclusions as needed
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
-          name: python-app
-          path: |
-            release.zip
-            !venv/
+          name: python-function-app-package # A more descriptive name
+          path: release.zip # Upload the created zip file
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    
+
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
-          name: python-app
+          name: python-function-app-package # Use the same name as in upload-artifact
 
-      - name: Unzip artifact for deployment
-        run: unzip release.zip     
-        
+      # The package.zip will be downloaded to the root of the runner's workspace
+
       - name: 'Deploy to Azure Functions'
-        uses: Azure/functions-action@v1
+        uses: azure/functions-action@v1
         id: deploy-to-function
         with:
-          app-name: 'function-magiccars-email'
-          slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E63A6676DB544B59989BEAD9C56F9231 }}
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          slot-name: 'Production' # Unless you're using deployment slots, this is usually the default.
+          package: release.zip # Pass the path to the downloaded zip file directly
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E63A6676DB544B59989BEAD9C56F9231 }} # Ensure this secret is configured in GitHub
